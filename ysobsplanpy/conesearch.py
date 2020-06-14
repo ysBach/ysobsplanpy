@@ -25,11 +25,15 @@ class GuideStars():
 
     def query(self, magcut=13.):
         self.queried = ConeSearch.query_region(self.center, radius=self.radius)
+        self.magcut = magcut
         if magcut is not None:
             magmask = self.queried['Mag'] > magcut
             self.queried = self.queried[~magmask]
         # self.queried['dra'] = self.queried['ra'].to(u.deg) - self.center
         self.stars = SkyCoord(self.queried['ra'], self.queried['dec'])
+
+        self.queried['_r'] = self.center.separation(self.stars)
+
         dist_offset = self.stars.transform_to(self.center_frame)
         self.queried['offset_x'] = dist_offset.lon
         self.queried['offset_y'] = dist_offset.lat
@@ -45,17 +49,21 @@ class GuideStars():
             num_show_mag=5, mag_kw={},
             **kwargs
     ):
-        if size is None:
-            size = size_factor*self.queried['brightness']
 
+        show_mag = False
         if num_show_mag is not None:
             show_mag = True
-            if num_show_mag < 0:
-                num_show_mag = len(self.queried)
-            self.queried.sort('Mag')
+            n_queried = len(self.queried)
+            if num_show_mag < 0 or num_show_mag > n_queried:
+                num_show_mag = n_queried
+            self.queried.sort('brightness', reverse=True)
+
+        if size is None:
+            size = size_factor*self.queried['brightness'].copy()
 
         offsets_x = np.array(self.queried['offset_x'].to(unit))
         offsets_y = np.array(self.queried['offset_y'].to(unit))
+        mags = self.queried['Mag']
         ax.scatter(
             offsets_x,
             offsets_y,
@@ -87,7 +95,7 @@ class GuideStars():
         if show_mag:
             for i in range(num_show_mag):
                 ax.text(offsets_x[i], offsets_y[i],
-                        s=f"{self.queried['Mag'][i]:.2f}", **mag_kw)
+                        s=f"{mags[i]:.2f}", **mag_kw)
 
         if invert_lon:
             ax.set(
