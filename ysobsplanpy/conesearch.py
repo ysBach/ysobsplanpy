@@ -23,11 +23,10 @@ class GuideStars():
         )
         return expl
 
-    def query(self, magcut=13.):
+    def query(self, mag_cut=13.):
         self.queried = ConeSearch.query_region(self.center, radius=self.radius)
-        self.magcut = magcut
-        if magcut is not None:
-            magmask = self.queried['Mag'] > magcut
+        if mag_cut is not None:
+            magmask = self.queried['Mag'] > mag_cut
             self.queried = self.queried[~magmask]
         # self.queried['dra'] = self.queried['ra'].to(u.deg) - self.center
         self.stars = SkyCoord(self.queried['ra'], self.queried['dec'])
@@ -38,28 +37,39 @@ class GuideStars():
         self.queried['offset_x'] = dist_offset.lon
         self.queried['offset_y'] = dist_offset.lat
         mags = self.queried['Mag']
-        refmag = magcut if magcut is not None else np.min(mags)
-        self.queried['brightness'] = 10**(-0.4*(mags - refmag))
+        self.magcut = mag_cut
+        self.mag_ref = mag_cut if mag_cut is not None else np.min(mags)
+
+    @staticmethod
+    def m2s(mag, mag_ref, size_factor=1.):
+        return size_factor*10**(-0.4*(mag - mag_ref))
+
+    @staticmethod
+    def s2m(size, mag_ref, size_factor=1.):
+        return mag_ref - 2.5*np.log10(size/size_factor)
 
     def quickplot(
-            self, ax, marker='o', color='k', size_factor=20, size=None,
-            alpha=0.3, cross=True, cross_kw={'color': 'k', 'lw': 0.5},
+            self, ax, marker='o', color='k', size_factor=20., size=None,
+            alpha=0.3, scat_kw={},
+            cross=True, cross_kw={'color': 'k', 'lw': 0.5},
             unit='arcmin', invert_lon=True, fov_circle=True,
             fov_kw={'facecolor': 'none', 'edgecolor': 'k', 'lw': 1},
-            num_show_mag=5, mag_kw={},
-            **kwargs
+            num_show_mag=5, mag_kw={'fontsize': 10},
+            legend=True, legend_kw={'loc': 1, 'fontsize': 9}
     ):
-
         show_mag = False
         if num_show_mag is not None:
             show_mag = True
             n_queried = len(self.queried)
             if num_show_mag < 0 or num_show_mag > n_queried:
                 num_show_mag = n_queried
-            self.queried.sort('brightness', reverse=True)
+            self.queried.sort('Mag')
 
         if size is None:
-            size = size_factor*self.queried['brightness'].copy()
+            size = self.m2s(self.queried['Mag'].copy(), self.mag_ref,
+                            size_factor=size_factor)
+        else:
+            size_factor = 1.
 
         offsets_x = np.array(self.queried['offset_x'].to(unit))
         offsets_y = np.array(self.queried['offset_y'].to(unit))
@@ -71,8 +81,10 @@ class GuideStars():
             color=color,
             s=size,
             alpha=alpha,
-            **kwargs
+            **scat_kw
         )
+        ax.scatter(0, 0, marker='s', color='r', facecolors='none',
+                   s=size_factor)
         ax.set(
             xlabel=f"Projected offset (longitude; {unit})",
             ylabel=f"Projected offset (latitude; {unit})"
@@ -101,3 +113,12 @@ class GuideStars():
             ax.set(
                 xlim=(ax.get_xlim()[::-1])
             )
+
+        if legend:
+            mm = np.arange(np.floor(np.min(mags)), self.mag_ref + 0.1, 1.)
+            # plt.plot has different size notation... F...k....
+            ss = np.sqrt(self.m2s(mm, self.mag_ref, size_factor))
+            for m, s in zip(mm, ss):
+                ax.plot(np.nan, np.nan, marker=marker, ls='', alpha=alpha,
+                        color=color, label=m, ms=s)
+            ax.legend(title="Mag", **legend_kw)
