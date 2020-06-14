@@ -6,7 +6,6 @@ from setuptools import setup, find_packages
 setup_requires = []
 install_requires = ['numpy',
                     'astropy >= 2.0',
-                    'matplotlib >= 2',
                     'astroquery >= 0.3.9']
 
 classifiers = ["Intended Audience :: Science/Research",
