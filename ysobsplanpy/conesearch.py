@@ -3,7 +3,7 @@ import numpy as np
 from astropy import units as u
 from astropy.coordinates import SkyCoord, SkyOffsetFrame
 from astroquery.vo_conesearch import ConeSearch
-from matplotlib.patches import Circle
+from matplotlib.patches import Circle, Rectangle
 
 
 __all__ = ['GuideStars']
@@ -49,13 +49,16 @@ class GuideStars():
         return mag_ref - 2.5*np.log10(size/size_factor)
 
     def quickplot(
-            self, ax, marker='o', color='k', size_factor=20., size=None,
-            alpha=0.3, scat_kw={},
-            cross=True, cross_kw={'color': 'k', 'lw': 0.5},
-            unit='arcmin', invert_lon=True, fov_circle=True,
-            fov_kw={'facecolor': 'none', 'edgecolor': 'k', 'lw': 1},
-            num_show_mag=5, mag_kw={'fontsize': 10},
-            legend=True, legend_kw={'loc': 1, 'fontsize': 9}
+        self, ax, marker='o', color='k', size_factor=20., size=None,
+        alpha=0.3, scat_kw={},
+        cross=True, cross_kw={'color': 'k', 'lw': 0.5},
+        unit='arcmin', invert_lon=True, query_circle=True,
+        circ_kw={'facecolor': 'none', 'edgecolor': 'k', 'lw': 1, 'ls': ':'},
+        fov_size=None, fov_angle=0,
+        fov_kw={'facecolor': 'none', 'edgecolor': 'k', 'lw': 1},
+        rect_kw={'facecolor': 'none', 'edgecolor': 'k', 'lw': 1},
+        num_show_mag=5, mag_kw={'fontsize': 10},
+        legend=True, legend_kw={'loc': 1, 'fontsize': 9}
     ):
         show_mag = False
         if num_show_mag is not None:
@@ -70,6 +73,8 @@ class GuideStars():
                             size_factor=size_factor)
         else:
             size_factor = 1.
+
+        rad = self.radius.to_value(unit)
 
         offsets_x = np.array(self.queried['offset_x'].to(unit))
         offsets_y = np.array(self.queried['offset_y'].to(unit))
@@ -94,20 +99,37 @@ class GuideStars():
             ax.axhline(0, **cross_kw)
             ax.axvline(0, **cross_kw)
 
-        if fov_circle:
-            rad = self.radius.to_value(unit)
-            circ = Circle((0, 0), rad, **fov_kw)
+        if query_circle:
+            circ = Circle((0, 0), rad, **circ_kw)
             ax.add_patch(circ)
-            ax.set(
-                xlim=(-rad, +rad),
-                ylim=(-rad, +rad)
-            )
+
+        width = 0.
+        height = 0.
+        if fov_size is not None:
+            fov_size = np.atleast_1d(fov_size)
+            if fov_size.ndim != 1:
+                raise ValueError("fov_size must be scalar or 1-D")
+            if fov_size.shape[0] == 1:
+                width, height = fov_size[0], fov_size[0]
+            elif fov_size.shape[0] == 2:
+                width, height = fov_size[0], fov_size[1]
+            else:
+                raise ValueError("fov_size must be size of 1 or 2.")
+
+            rect = Rectangle((-width/2, -height/2), width=width, height=height,
+                             angle=fov_angle, **fov_kw)
+            ax.add_patch(rect)
 
         # iterate only first ``num_show_mag`` rows
         if show_mag:
             for i in range(num_show_mag):
                 ax.text(offsets_x[i], offsets_y[i],
                         s=f"{mags[i]:.2f}", **mag_kw)
+
+        ax.set(
+            xlim=np.array([-1., 1.])*max(width/2., rad),
+            ylim=np.array([-1., 1.])*max(height/2., rad),
+        )
 
         if invert_lon:
             ax.set(
@@ -122,3 +144,6 @@ class GuideStars():
                 ax.plot(np.nan, np.nan, marker=marker, ls='', alpha=alpha,
                         color=color, label=m, ms=s)
             ax.legend(title="Mag", **legend_kw)
+
+        ax.set_aspect('equal')
+        print(f"FoV = ({width:.1f}, {height:.1f}) {unit}")
