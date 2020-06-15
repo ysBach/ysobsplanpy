@@ -18,7 +18,6 @@ from matplotlib import pyplot as plt
 from matplotlib import rcParams
 from ysobsplanpy import GuideStars
 
-
 # We need to do it in a separate cell. See:
 # https://github.com/jupyter/notebook/issues/3385
 plt.style.use('default')
@@ -29,10 +28,11 @@ g = GuideStars(ra=240.90177, dec=15.985262, radius=0.3, unit='deg')
 g.query(mag_cut=13)
 fig, axs = plt.subplots(1, 1, figsize=(7, 7),
                         sharex=False, sharey=False, gridspec_kw=None)
-g.quickplot(axs, num_show_mag=5)
+
+# Try g.quickplot? and change parameters as you like.
+g.quickplot(axs, num_show_mag=5, fov_size=21, unit='arcmin')
 
 plt.tight_layout()
-axs.set_aspect('equal')
 fig.align_ylabels(axs)
 fig.align_xlabels(axs)
 plt.show()
