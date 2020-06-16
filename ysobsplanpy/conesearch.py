@@ -10,9 +10,36 @@ __all__ = ['GuideStars']
 
 
 class GuideStars():
+    """ Finding Guide Stars based on selected catalogues by astroquery.
+    """
     def __init__(self, ra, dec, radius=0.1, unit='deg'):
+        '''
+        Parameters
+        ----------
+        ra, dec : float, str, `~astropy.Quantity`
+            The RA and DEC position of the center of the FOV for
+            cone-search. Currently only RA and DEC is supported for
+            brevity of the API. If float, it must be in the unit of
+            ``unit``.
+        radius : float, `~astropy.Quantity`, optional
+            The cone search radius. If float, it must be in the unit of
+            ``unit``.
+        unit : str, `~astropy.unit`, optional.
+            The unit for ``ra``, ``dec``, and ``radius`` if they're
+            floats.
+
+        Attributes
+        ----------
+        center : The center of FOV in `~astropy.coordinates.SkyCoord`.
+        radius : The search radius
+        center_frame : the `~astropy.coordinates.SkyOffsetFrame`
+        centered at the ``self.center``.
+        '''
         self.center = SkyCoord(ra=ra, dec=dec, unit=unit)
-        self.radius = radius*u.Unit(unit)
+        if isinstance(radius, u.Quantity):
+            self.radius = radius.to(unit)
+        else:
+            self.radius = radius*u.Unit(unit)
         self.center_frame = SkyOffsetFrame(origin=self.center)
 
     def __str__(self):
@@ -24,6 +51,28 @@ class GuideStars():
         return expl
 
     def query(self, mag_cut=13.):
+        ''' Queries and organizes the query result
+        Parameters
+        ----------
+        mag_cut : float, optional.
+            The maximum magnitude (in ``'Mag'`` column of the queried
+            result in pure astroquery) to use as guide star. If
+            ``None``, no such cut will be applied.
+
+        Note
+        ----
+        Internally it will add the following columns:
+            * ``'_r'``: Angular distance from the center
+            * ``'offset_x'``, ``'offset_y'``: angular offsets with
+            respect to ``self.center`` in the ``self.center_frame``
+            frame. This corrects the high-DEC effect (at DEC = 89 deg, 1
+            deg separation changes RA value dramatically by ~ 1/cos(DEC)
+            factor.)
+        ``self.mag_cut`` is the ``mag_cut`` given, and
+        ``self.mag_ref`` is that ``mag_cut``. If ``mag_cut`` is
+        ``None``, ``self.mag_ref`` is the maximum value of the
+        magnitudes of the guide stars.
+        '''
         self.queried = ConeSearch.query_region(self.center, radius=self.radius)
         if mag_cut is not None:
             magmask = self.queried['Mag'] > mag_cut
@@ -37,15 +86,33 @@ class GuideStars():
         self.queried['offset_x'] = dist_offset.lon
         self.queried['offset_y'] = dist_offset.lat
         mags = self.queried['Mag']
-        self.magcut = mag_cut
-        self.mag_ref = mag_cut if mag_cut is not None else np.min(mags)
+        self.mag_cut = mag_cut
+        self.mag_ref = mag_cut if mag_cut is not None else np.max(mags)
 
     @staticmethod
     def m2s(mag, mag_ref, size_factor=1.):
+        ''' Change magnitude to matplotlib scatter marker size.
+        Parameters
+        ----------
+        mag_ref : float
+            The reference magnitude which marker size is
+            ``size_factor``.
+        size_factor : float, optional.
+            The factor which multicatively scales the marker size.
+        '''
         return size_factor*10**(-0.4*(mag - mag_ref))
 
     @staticmethod
     def s2m(size, mag_ref, size_factor=1.):
+        ''' Change matplotlib scatter marker size to magnitude.
+        Parameters
+        ----------
+        mag_ref : float
+            The reference magnitude which marker size is
+            ``size_factor``.
+        size_factor : float, optional.
+            The factor which multicatively scales the marker size.
+        '''
         return mag_ref - 2.5*np.log10(size/size_factor)
 
     def quickplot(
@@ -60,6 +127,8 @@ class GuideStars():
         num_show_mag=5, mag_kw={'fontsize': 10},
         legend=True, legend_kw={'loc': 1, 'fontsize': 9}
     ):
+        ''' Quickly draw FoV plot. Maybe no need for documentation.
+        '''
         show_mag = False
         if num_show_mag is not None:
             show_mag = True
